@@ -3,10 +3,10 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import axios from "axios";
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
+async function startServer() {
   // Image Proxy to solve CORS issues
   app.get("/api/proxy-image", async (req, res) => {
     const imageUrl = req.query.url as string;
@@ -54,7 +54,7 @@ async function startServer() {
   }
 }
 
+startServer();
+
 // For Vercel Serverless Functions
-export default startServer().then(() => app);
-const appInstance = app; 
-export { appInstance as app };
+export default app;
