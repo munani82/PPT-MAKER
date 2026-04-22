@@ -21,7 +21,7 @@ import {
   LogIn,
   LogOut,
   RotateCcw,
-  CloudCheck,
+  Check,
   Cloud
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
