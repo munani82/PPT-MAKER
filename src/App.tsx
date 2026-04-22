@@ -368,25 +368,31 @@ export default function App() {
     }
   };
 
-  const handleLogin = async () => {
+  const handleLogin = () => {
     setAuthError(null);
+    // Note: We call state update AND login simultaneously to preserve user gesture
     setIsLoggingIn(true);
-    try {
-      await signInWithGoogle();
-    } catch (error: any) {
-      console.error("Login failed:", error);
-      if (error.code === 'auth/popup-blocked') {
-        setAuthError("브라우저에서 팝업이 차단되었습니다. 주소창 옆의 팝업 허용 버튼을 눌러주세요.");
-      } else if (error.code === 'auth/unauthorized-domain') {
-        setAuthError("현재 도메인이 인증되지 않았습니다. '새 탭에서 열기'를 눌러 실행해주세요.");
-      } else if (error.code === 'auth/network-request-failed') {
-        setAuthError("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
-      } else {
-        setAuthError(`로그인 오류: ${error.code}`);
-      }
-    } finally {
-      setIsLoggingIn(false);
-    }
+    
+    signInWithGoogle()
+      .then((u) => {
+        if (!u) {
+          // Handled inside (popup closed etc)
+          setIsLoggingIn(false);
+          return;
+        }
+        // Success happens via onAuthStateChanged
+      })
+      .catch((error: any) => {
+        console.error("Login failed:", error);
+        if (error.code === 'auth/popup-blocked') {
+          setAuthError("브라우저가 로그인 창을 차단했습니다. [새 탭에서 열기]를 눌러 실행하거나, 주소창의 차단 해제를 꼭 확인해주세요.");
+        } else if (error.code === 'auth/unauthorized-domain') {
+          setAuthError("인증되지 않은 도메인입니다. Firebase 콘솔에서 현재 주소를 승인된 도메인에 추가해야 합니다.");
+        } else {
+          setAuthError(`로그인 오류: ${error.code}`);
+        }
+        setIsLoggingIn(false);
+      });
   };
 
   const handleLogout = async () => {
