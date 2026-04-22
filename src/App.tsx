@@ -57,6 +57,7 @@ export default function App() {
   const [orientation, setOrientation] = useState<LayoutOrientation>('landscape');
   const [showHelp, setShowHelp] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Auth Handling
   useEffect(() => {
@@ -366,6 +367,17 @@ export default function App() {
     }
   };
 
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error("Login failed:", error);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     window.location.reload(); // Refresh to clear local state
@@ -411,11 +423,16 @@ export default function App() {
               </div>
             ) : (
               <button 
-                onClick={signInWithGoogle}
-                className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[11px] font-bold text-blue-600 transition-all hover:bg-blue-100 active:scale-95"
+                onClick={handleLogin}
+                disabled={isLoggingIn}
+                className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[11px] font-bold text-blue-600 transition-all hover:bg-blue-100 active:scale-95 disabled:opacity-50"
               >
-                <LogIn className="h-3.5 w-3.5" />
-                Google Login
+                {isLoggingIn ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                ) : (
+                  <LogIn className="h-3.5 w-3.5" />
+                )}
+                {isLoggingIn ? 'Connecting...' : 'Google Login'}
               </button>
             )
           )}
