@@ -425,27 +425,28 @@ export default function App() {
     }
   };
 
-  const handleLogin = () => {
-    setAuthError(null);
-    localStorage.setItem('auth_attempt', Date.now().toString());
-    
+  const handleLogin = (e: React.MouseEvent) => {
+    // PREVENT any React event bubbling/delay
+    e.preventDefault();
+    e.stopPropagation();
+
+    // CRITICAL: NO logic, NO state updates, NO logs before this line.
+    // This is the only way to bypass strict popup blockers.
     signInWithPopup(auth, googleProvider)
       .then((result) => {
         if (result.user) {
-          addLog(`Popup Success: ${result.user.email}`);
+          addLog(`Success: ${result.user.email}`);
           setUser(result.user);
           localStorage.removeItem('auth_attempt');
         }
       })
       .catch((error: any) => {
-        addLog(`Popup Error: ${error.code}`);
+        addLog(`Error Code: ${error.code}`);
         if (error.code === 'auth/popup-blocked') {
           setAuthError("POPUP_BLOCKED");
         } else if (error.code === 'auth/unauthorized-domain') {
           setAuthError("UNAUTHORIZED_DOMAIN");
-        } else if (error.code === 'auth/popup-closed-by-user') {
-          setAuthError(null);
-        } else {
+        } else if (error.code !== 'auth/popup-closed-by-user') {
           setAuthError(error.code);
         }
       })
@@ -453,7 +454,10 @@ export default function App() {
         setIsLoggingIn(false);
       });
       
+    // Async updates AFTER the critical call
     setIsLoggingIn(true);
+    setAuthError(null);
+    localStorage.setItem('auth_attempt', Date.now().toString());
   };
 
   const handleRedirectLogin = () => {
