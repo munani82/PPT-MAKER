@@ -28,7 +28,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import pptxgen from 'pptxgenjs';
 import { cn } from './lib/utils';
 import { Slide, Layer, LayoutOrientation } from './types';
-import { auth, signInWithGoogle, signInWithGoogleRedirect, handleRedirectResult, logout, db } from './lib/firebase';
+import { auth, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
@@ -59,25 +59,27 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+
+  const addLog = (msg: string) => {
+    console.log(msg);
+    setDebugLogs(prev => [`${new Date().toLocaleTimeString()}: ${msg}`, ...prev].slice(0, 5));
+  };
 
   // Auth Handling
   useEffect(() => {
-    // 1. Initial check for immediate user
-    if (auth.currentUser) {
-      setUser(auth.currentUser);
-      setIsLoadingAuth(false);
-    }
-
-    // 2. Handle redirect result first
-    handleRedirectResult().then(u => {
-      if (u) {
-        setUser(u);
-        setIsLoadingAuth(false);
+    addLog("Checking auth state...");
+    
+    // Handle redirect result
+    getRedirectResult(auth).then(result => {
+      if (result?.user) {
+        addLog(`Redirect login success: ${result.user.email}`);
+        setUser(result.user);
       }
-    });
+    }).catch(e => addLog(`Redirect error: ${e.code}`));
 
-    // 3. Subscription
     const unsubscribe = onAuthStateChanged(auth, (u) => {
+      addLog(u ? `Logged in: ${u.email}` : "State: Logged out");
       setUser(u);
       setIsLoadingAuth(false);
     });
@@ -385,25 +387,26 @@ export default function App() {
 
   const handleLogin = () => {
     setAuthError(null);
+    setIsLoggingIn(true);
+    addLog("Opening Login Popup...");
     
-    // We start the login process FIRST to ensure the browser sees it as a direct user gesture
-    signInWithGoogle()
-      .then((u) => {
-        if (u) {
-          setUser(u);
-          setIsLoggingIn(false);
-        } else {
-          // If u is null, it means popup was closed or cancelled
-          setIsLoggingIn(false);
+    signInWithPopup(auth, googleProvider)
+      .then((result) => {
+        if (result.user) {
+          addLog(`Success: ${result.user.email}`);
+          setUser(result.user);
         }
+        setIsLoggingIn(false);
       })
       .catch((error: any) => {
-        console.error("Login failed:", error);
+        addLog(`Error: ${error.code}`);
         setIsLoggingIn(false);
         if (error.code === 'auth/popup-blocked') {
           setAuthError("POPUP_BLOCKED");
         } else if (error.code === 'auth/unauthorized-domain') {
           setAuthError("UNAUTHORIZED_DOMAIN");
+        } else if (error.code === 'auth/popup-closed-by-user') {
+          setAuthError(null); // Silent
         } else {
           setAuthError(`ERROR: ${error.code}`);
         }
@@ -413,15 +416,17 @@ export default function App() {
   const handleRedirectLogin = () => {
     setAuthError(null);
     setIsLoggingIn(true);
-    signInWithGoogleRedirect().catch(e => {
+    addLog("Switching to Redirect...");
+    signInWithRedirect(auth, googleProvider).catch(e => {
+      addLog(`Redirect call failed: ${e.code}`);
       setAuthError(`REDIRECT_ERROR: ${e.code}`);
       setIsLoggingIn(false);
     });
   };
 
   const handleLogout = async () => {
-    await logout();
-    window.location.reload(); // Refresh to clear local state
+    await signOut(auth);
+    window.location.reload();
   };
 
   return (
@@ -449,6 +454,11 @@ export default function App() {
                 </span>
               </div>
             )}
+            <div className="flex flex-col gap-0.5 border-l border-neutral-200 pl-3">
+              {debugLogs.map((log, i) => (
+                <p key={i} className="text-[8px] font-mono text-neutral-400 leading-none">{log}</p>
+              ))}
+            </div>
           </div>
         </div>
 
