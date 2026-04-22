@@ -51,6 +51,8 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [slides, setSlides] = useState<Slide[]>([DEFAULT_SLIDE()]);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
@@ -85,28 +87,31 @@ export default function App() {
     return () => unsubscribe();
   }, [user, isSaving]);
 
-  // Firestore Sync - Saving (Debounced)
+  // Firestore Sync - Detecting Changes
   useEffect(() => {
     if (!user || isLoadingAuth) return;
+    setHasPendingChanges(true);
+  }, [slides, orientation]);
 
-    const saveTimeout = setTimeout(async () => {
-      setIsSaving(true);
-      try {
-        await setDoc(doc(db, 'userStates', user.uid), {
-          userId: user.uid,
-          slides,
-          orientation,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (e) {
-        console.error("Save failed:", e);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 2000); // Save after 2s of inactivity
-
-    return () => clearTimeout(saveTimeout);
-  }, [slides, orientation, user, isLoadingAuth]);
+  const saveToCloud = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'userStates', user.uid), {
+        userId: user.uid,
+        slides,
+        orientation,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setLastSaved(new Date());
+      setHasPendingChanges(false);
+    } catch (e) {
+      console.error("Save failed:", e);
+      alert("저장에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const resetProject = () => {
     if (confirm("모든 작업 내용이 사라집니다. 정말 초기화하시겠습니까?")) {
@@ -407,15 +412,33 @@ export default function App() {
               A3 {orientation === 'landscape' ? 'Horizontal' : 'Vertical'} Mode
             </span>
             {user && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-neutral-50 border border-neutral-100">
-                {isSaving ? (
-                  <Cloud className="h-3 w-3 text-neutral-400 animate-pulse" />
-                ) : (
-                  <CloudCheck className="h-3 w-3 text-green-500" />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={saveToCloud}
+                  disabled={isSaving || !hasPendingChanges}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-md border transition-all active:scale-95",
+                    hasPendingChanges 
+                      ? "bg-blue-600 border-blue-700 text-white shadow-sm hover:bg-blue-700" 
+                      : "bg-neutral-50 border-neutral-100 text-neutral-400 cursor-default"
+                  )}
+                >
+                  {isSaving ? (
+                    <Cloud className="h-3 w-3 animate-pulse" />
+                  ) : hasPendingChanges ? (
+                    <Cloud className="h-3 w-3" />
+                  ) : (
+                    <Check className="h-3 w-3 text-green-500" />
+                  )}
+                  <span className="text-[10px] font-bold uppercase tracking-wide">
+                    {isSaving ? 'Saving...' : hasPendingChanges ? 'Save to Cloud' : 'Up to Date'}
+                  </span>
+                </button>
+                {lastSaved && !hasPendingChanges && (
+                  <span className="text-[9px] text-neutral-400 hidden sm:inline">
+                    Last saved: {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 )}
-                <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-tighter">
-                  {isSaving ? 'Syncing...' : 'Saved to Cloud'}
-                </span>
               </div>
             )}
           </div>
