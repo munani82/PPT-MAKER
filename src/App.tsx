@@ -90,6 +90,13 @@ export default function App() {
   // Firestore Sync - Detecting Changes
   useEffect(() => {
     if (!user || isLoadingAuth) return;
+    
+    // To prevent the "Echo" effect (server update triggering pending state)
+    // we should only mark as pending if the window is currently focused 
+    // or if the change didn't just come from a database load.
+    const isInitialLoad = !lastSaved && !hasPendingChanges;
+    if (isInitialLoad) return;
+
     setHasPendingChanges(true);
   }, [slides, orientation]);
 
