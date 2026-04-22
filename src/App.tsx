@@ -59,83 +59,15 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-
-  const addLog = (msg: string) => {
-    console.log(msg);
-    setDebugLogs(prev => [`${new Date().toLocaleTimeString()}: ${msg}`, ...prev].slice(0, 5));
-  };
 
   // Auth Handling
   useEffect(() => {
-    addLog("Auth Sync Started...");
-    
-    // 1. Check for known user first (if session survived)
-    if (auth.currentUser) {
-      addLog(`Found Session: ${auth.currentUser.email}`);
-      setUser(auth.currentUser);
-      setIsLoadingAuth(false);
-    }
-
-    // 2. Handle the redirect payload (The tricky part on Vercel)
-    const handleRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result?.user) {
-          addLog(`Success: ${result.user.email}`);
-          setUser(result.user);
-          localStorage.removeItem('auth_attempt');
-        } else if (localStorage.getItem('auth_attempt')) {
-          addLog("SCANNING: Looking for data...");
-          // If expected attempt failed, check auth state a few more times manually
-          let attempts = 0;
-          const interval = setInterval(() => {
-            attempts++;
-            if (auth.currentUser) {
-              addLog(`Recovered: ${auth.currentUser.email}`);
-              setUser(auth.currentUser);
-              localStorage.removeItem('auth_attempt');
-              clearInterval(interval);
-            }
-            if (attempts >= 5) {
-              addLog("FAIL: Data blocked by browser.");
-              clearInterval(interval);
-            }
-          }, 1000);
-        }
-      } catch (e: any) {
-        addLog(`Error: ${e.code}`);
-      } finally {
-        setIsLoadingAuth(false);
-      }
-    };
-
-    handleRedirect();
-
-    // 3. Global Observer
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        addLog(`Active: ${u.email}`);
-        setUser(u);
-        localStorage.removeItem('auth_attempt');
-      } else {
-        addLog("Status: Offline");
-      }
+      setUser(u);
       setIsLoadingAuth(false);
     });
-    
     return () => unsubscribe();
   }, []);
-
-  const debugDomain = () => {
-    addLog(`Origin: ${window.location.origin}`);
-    addLog(`UA: ${navigator.userAgent.slice(0, 30)}...`);
-  };
-
-  const forceCheckAuth = () => {
-    addLog(`Manual Scan: ${auth.currentUser ? auth.currentUser.email : "empty"}`);
-    if (auth.currentUser) setUser(auth.currentUser);
-  };
 
   // Firestore Sync - Loading
   useEffect(() => {
@@ -436,50 +368,24 @@ export default function App() {
     }
   };
 
-  const handleLogin = (e: React.MouseEvent) => {
-    // PREVENT any React event bubbling/delay
+  const handleLogin = async (e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-
-    // CRITICAL: NO logic, NO state updates, NO logs before this line.
-    // This is the only way to bypass strict popup blockers.
-    signInWithPopup(auth, googleProvider)
-      .then((result) => {
-        if (result.user) {
-          addLog(`Success: ${result.user.email}`);
-          setUser(result.user);
-          localStorage.removeItem('auth_attempt');
-        }
-      })
-      .catch((error: any) => {
-        addLog(`Error Code: ${error.code}`);
-        if (error.code === 'auth/popup-blocked') {
-          setAuthError("POPUP_BLOCKED");
-        } else if (error.code === 'auth/unauthorized-domain') {
-          setAuthError("UNAUTHORIZED_DOMAIN");
-        } else if (error.code !== 'auth/popup-closed-by-user') {
-          setAuthError(error.code);
-        }
-      })
-      .finally(() => {
-        setIsLoggingIn(false);
-      });
-      
-    // Async updates AFTER the critical call
-    setIsLoggingIn(true);
-    setAuthError(null);
-    localStorage.setItem('auth_attempt', Date.now().toString());
-  };
-
-  const handleRedirectLogin = () => {
     setAuthError(null);
     setIsLoggingIn(true);
-    addLog("Redirecting...");
-    localStorage.setItem('auth_attempt', Date.now().toString());
-    signInWithRedirect(auth, googleProvider).catch(e => {
-      addLog(`Redirect Err: ${e.code}`);
+    
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      if (error.code === 'auth/popup-blocked') {
+        setAuthError("브라우저가 로그인 창을 차단했습니다. 주소창 옆의 차단 해제 설정을 확인해주세요.");
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setAuthError("허용되지 않은 도메인입니다. Firebase 콘솔 설정을 확인해주세요.");
+      } else if (error.code !== 'auth/popup-closed-by-user') {
+        setAuthError(`로그인 오류: ${error.code}`);
+      }
+    } finally {
       setIsLoggingIn(false);
-    });
+    }
   };
 
   const handleLogout = async () => {
@@ -512,11 +418,6 @@ export default function App() {
                 </span>
               </div>
             )}
-            <div className="flex flex-col gap-0.5 border-l border-neutral-200 pl-3">
-              {debugLogs.map((log, i) => (
-                <p key={i} className="text-[8px] font-mono text-neutral-400 leading-none">{log}</p>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -542,14 +443,6 @@ export default function App() {
                   <p className="text-[8px] font-bold text-red-400">위 주소를 Firebase 승인된 도메인에 추가해주세요.</p>
                 </div>
               )}
-              {authError === 'POPUP_BLOCKED' && (
-                <button 
-                  onClick={handleRedirectLogin}
-                  className="mt-1 w-full rounded bg-red-600 py-1 text-[9px] font-bold text-white hover:bg-red-700 transition-colors"
-                >
-                  Redirect 방식으로 다시 시도
-                </button>
-              )}
             </div>
           )}
 
@@ -563,36 +456,14 @@ export default function App() {
                 {user.photoURL && <img src={user.photoURL} className="h-8 w-8 rounded-full border border-neutral-200" alt="avatar" />}
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleLogin}
-                  disabled={isLoggingIn}
-                  className="flex items-center gap-2 rounded-full bg-blue-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
-                >
-                  {isLoggingIn ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <LogIn className="h-3.5 w-3.5" />}
-                  Login (Popup)
-                </button>
-                <button 
-                  onClick={handleRedirectLogin}
-                  className="flex items-center gap-2 rounded-full bg-neutral-100 px-4 py-1.5 text-[11px] font-bold text-neutral-600 transition-all hover:bg-neutral-200 active:scale-95"
-                >
-                  Login (Redirect)
-                </button>
-                <button 
-                  onClick={forceCheckAuth}
-                  className="h-8 w-8 flex items-center justify-center rounded-full border border-neutral-200 text-neutral-400 hover:bg-neutral-50"
-                  title="Force Sync"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-                <button 
-                  onClick={debugDomain}
-                  className="h-8 w-8 flex items-center justify-center rounded-full border border-neutral-200 text-neutral-400 hover:bg-neutral-50"
-                  title="Debug Domain"
-                >
-                  <HelpCircle className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              <button 
+                onClick={handleLogin}
+                disabled={isLoggingIn}
+                className="flex items-center gap-2 rounded-full bg-blue-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+              >
+                {isLoggingIn ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <LogIn className="h-3.5 w-3.5" />}
+                Google Login
+              </button>
             )
           )}
 
