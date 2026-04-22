@@ -68,39 +68,37 @@ export default function App() {
 
   // Auth Handling
   useEffect(() => {
-    addLog("Mounting Auth...");
+    addLog("Auth Initializing...");
     
-    // Explicitly check current user on mount as backup
-    if (auth.currentUser) {
-      addLog(`Found Current: ${auth.currentUser.email}`);
-      setUser(auth.currentUser);
-      setIsLoadingAuth(false);
-    }
-
-    // Aggressive redirect check
+    // Handle redirect result immediately
     getRedirectResult(auth).then(result => {
       if (result?.user) {
-        addLog(`Redirect OK: ${result.user.email}`);
+        addLog(`Redirect Success: ${result.user.email}`);
         setUser(result.user);
-        setIsLoadingAuth(false);
       } else {
-        addLog("Redirect: No payload");
+        addLog("No redirect data found");
       }
     }).catch(e => {
-      addLog(`Redirect Err: ${e.code}`);
-      setIsLoadingAuth(false);
+      addLog(`Redirect Error: ${e.code}`);
     });
 
+    // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      addLog(u ? `Auth Observed: ${u.email}` : "Auth Observed: null");
+      addLog(u ? `User: ${u.email}` : "No User detected");
       setUser(u);
       setIsLoadingAuth(false);
     });
+    
     return () => unsubscribe();
   }, []);
 
+  const debugDomain = () => {
+    addLog(`Origin: ${window.location.origin}`);
+    addLog(`UA: ${navigator.userAgent.slice(0, 30)}...`);
+  };
+
   const forceCheckAuth = () => {
-    addLog(`Manual Check: ${auth.currentUser ? auth.currentUser.email : "none"}`);
+    addLog(`Manual Scan: ${auth.currentUser ? auth.currentUser.email : "empty"}`);
     if (auth.currentUser) setUser(auth.currentUser);
   };
 
@@ -544,9 +542,16 @@ export default function App() {
                 <button 
                   onClick={forceCheckAuth}
                   className="h-8 w-8 flex items-center justify-center rounded-full border border-neutral-200 text-neutral-400 hover:bg-neutral-50"
-                  title="Check Connection"
+                  title="Force Sync"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+                <button 
+                  onClick={debugDomain}
+                  className="h-8 w-8 flex items-center justify-center rounded-full border border-neutral-200 text-neutral-400 hover:bg-neutral-50"
+                  title="Debug Domain"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
                 </button>
               </div>
             )
