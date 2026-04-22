@@ -304,7 +304,7 @@ export default function App() {
             <div className="h-4 w-4 border-2 border-white" />
           </div>
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold tracking-tight text-neutral-900">Worship Flow Automaker</h1>
+            <h1 className="text-lg font-bold tracking-tight text-neutral-900">문환's 콘티 메이커</h1>
             <span className="rounded-full bg-[#E0F2FE] px-3 py-0.5 text-[11px] font-semibold text-[#0369A1]">
               A3 {orientation === 'landscape' ? 'Horizontal' : 'Vertical'} Mode
             </span>
