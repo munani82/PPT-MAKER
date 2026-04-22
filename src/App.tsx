@@ -385,17 +385,21 @@ export default function App() {
 
   const handleLogin = () => {
     setAuthError(null);
-    setIsLoggingIn(true);
     
+    // We start the login process FIRST to ensure the browser sees it as a direct user gesture
     signInWithGoogle()
       .then((u) => {
         if (u) {
-          setUser(u); // Manually inject user into state
+          setUser(u);
+          setIsLoggingIn(false);
+        } else {
+          // If u is null, it means popup was closed or cancelled
+          setIsLoggingIn(false);
         }
-        setIsLoggingIn(false);
       })
       .catch((error: any) => {
         console.error("Login failed:", error);
+        setIsLoggingIn(false);
         if (error.code === 'auth/popup-blocked') {
           setAuthError("POPUP_BLOCKED");
         } else if (error.code === 'auth/unauthorized-domain') {
@@ -403,7 +407,6 @@ export default function App() {
         } else {
           setAuthError(`ERROR: ${error.code}`);
         }
-        setIsLoggingIn(false);
       });
   };
 
@@ -466,7 +469,7 @@ export default function App() {
               {authError === 'UNAUTHORIZED_DOMAIN' && (
                 <div className="mt-1 flex flex-col gap-1">
                   <p className="text-[8px] text-neutral-500 break-all bg-white p-1 rounded border border-red-100">
-                    ais-pre-utkzruc3s7h2sorxto3srk-208307728335.asia-east1.run.app
+                    ppt-maker-phi.vercel.app
                   </p>
                   <p className="text-[8px] font-bold text-red-400">위 주소를 Firebase 승인된 도메인에 추가해주세요.</p>
                 </div>
