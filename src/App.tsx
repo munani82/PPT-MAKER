@@ -58,6 +58,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Auth Handling
   useEffect(() => {
@@ -368,11 +369,21 @@ export default function App() {
   };
 
   const handleLogin = async () => {
+    setAuthError(null);
     setIsLoggingIn(true);
     try {
       await signInWithGoogle();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
+      if (error.code === 'auth/popup-blocked') {
+        setAuthError("브라우저에서 팝업이 차단되었습니다. 주소창 옆의 팝업 허용 버튼을 눌러주세요.");
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setAuthError("현재 도메인이 인증되지 않았습니다. '새 탭에서 열기'를 눌러 실행해주세요.");
+      } else if (error.code === 'auth/network-request-failed') {
+        setAuthError("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+      } else {
+        setAuthError(`로그인 오류: ${error.code}`);
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -412,6 +423,14 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
+          {authError && (
+            <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-[11px] font-medium text-red-600 border border-red-100">
+              <HelpCircle className="h-3 w-3" />
+              {authError}
+              <button onClick={() => setAuthError(null)} className="ml-1 hover:text-red-800">×</button>
+            </div>
+          )}
+
           {!isLoadingAuth && (
             user ? (
               <div className="flex items-center gap-3 pr-4 border-r border-neutral-200">
