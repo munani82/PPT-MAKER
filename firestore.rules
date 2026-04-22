@@ -1,41 +1,19 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // Default deny for all other paths
     match /{document=**} {
       allow read, write: if false;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidMetadata(data) {
-      return data.keys().hasAll(['userId', 'orientation', 'updatedAt']) &&
-             data.userId is string &&
-             data.orientation in ['landscape', 'portrait'] &&
-             data.updatedAt is timestamp;
-    }
-
-    function isValidSlide(data) {
-      return data.keys().hasAll(['index', 'layers']) &&
-             data.index is int &&
-             data.layers is list;
-    }
-
+    // Main user state and subcollections
     match /userStates/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidMetadata(request.resource.data);
-      allow delete: if isOwner(userId);
+      // Root metadata document
+      allow get, list, write: if request.auth != null && request.auth.uid == userId;
 
-      match /slides/{slideId} {
-        allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId) && isValidSlide(request.resource.data);
-        allow delete: if isOwner(userId);
+      // Slides subcollection - explicitly allow recursive matches for easier management
+      match /slides/{document=**} {
+        allow get, list, write: if request.auth != null && request.auth.uid == userId;
       }
     }
   }

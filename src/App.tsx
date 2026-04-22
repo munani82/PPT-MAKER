@@ -63,6 +63,7 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const markDirty = () => {
+    console.log("Marking document as dirty (pending changes)");
     setHasPendingChanges(true);
   };
   const [authError, setAuthError] = useState<string | null>(null);
@@ -109,6 +110,8 @@ export default function App() {
       }
     }, (error) => {
       console.error("Slides listener error:", error);
+      // If we get a permission error, it might be due to the path or auth state.
+      // We'll gracefully fail without crashing the UI.
     });
 
     return () => {
