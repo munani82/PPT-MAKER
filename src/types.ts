@@ -6,7 +6,7 @@ export interface Layer {
   type: LayerType;
   isVisible: boolean;
   content: string; // Base64 or Color hex
-  opacity: number;
+  scale: number;
 }
 
 export interface Slide {

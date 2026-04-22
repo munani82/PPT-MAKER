@@ -22,7 +22,8 @@ import {
   LogOut,
   RotateCcw,
   Check,
-  Cloud
+  Cloud,
+  Maximize
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pptxgen from 'pptxgenjs';
@@ -43,7 +44,7 @@ const DEFAULT_SLIDE = () => ({
     type: 'image',
     isVisible: true,
     content: '',
-    opacity: 1
+    scale: 1
   }))
 });
 
@@ -79,7 +80,17 @@ export default function App() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists() && !isSaving) {
         const data = docSnap.data();
-        if (data.slides) setSlides(data.slides);
+        if (data.slides) {
+          // Normalize data: ensure all layers have a 'scale' property (migration from opacity)
+          const normalizedSlides = data.slides.map((slide: any) => ({
+            ...slide,
+            layers: slide.layers.map((layer: any) => ({
+              ...layer,
+              scale: layer.scale ?? layer.opacity ?? 1
+            }))
+          }));
+          setSlides(normalizedSlides);
+        }
         if (data.orientation) setOrientation(data.orientation);
       }
     });
@@ -138,7 +149,7 @@ export default function App() {
       type: 'image',
       isVisible: true,
       content: '',
-      opacity: 1
+      scale: 1
     };
     updateSlideLayers(activeSlide.id, [...activeSlide.layers, newLayer]);
     setActiveLayerId(newLayer.id);
@@ -171,7 +182,7 @@ export default function App() {
         type: 'image',
         isVisible: true,
         content: '',
-        opacity: 1
+        scale: 1
       }))
     };
     setSlides([...slides, newSlide]);
@@ -344,12 +355,19 @@ export default function App() {
             const row = Math.floor(i / cols);
             
             const isUrl = layer.content.startsWith('http');
+            
+            // Calculate zoomed dimensions for PPTX
+            const imgW = slotW * layer.scale;
+            const imgH = slotH * layer.scale;
+            const imgX = (col * slotW) - ((imgW - slotW) / 2);
+            const imgY = (row * slotH) - ((imgH - slotH) / 2);
+
             const commonProps = {
-              x: col * slotW,
-              y: row * slotH,
-              w: slotW,
-              h: slotH,
-              sizing: { type: 'contain' as const, w: slotW, h: slotH }
+              x: imgX,
+              y: imgY,
+              w: imgW,
+              h: imgH,
+              sizing: { type: 'contain' as const, w: imgW, h: imgH }
             };
 
             if (isUrl) {
@@ -656,9 +674,8 @@ export default function App() {
                   <AnimatePresence>
                     {layer.isVisible && layer.content ? (
                       <motion.img 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: layer.opacity }}
-                        exit={{ opacity: 0 }}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: layer.scale }}
                         src={layer.content}
                         className="absolute inset-0 h-full w-full object-contain"
                         referrerPolicy="no-referrer"
@@ -692,16 +709,19 @@ export default function App() {
                               </button>
                             </div>
                             <div className="w-24 space-y-1">
-                               <p className="text-[9px] font-bold text-neutral-500 uppercase text-center">Opacity</p>
+                               <div className="flex items-center justify-between">
+                                 <p className="text-[9px] font-bold text-neutral-500 uppercase">Image Zoom</p>
+                                 <span className="text-[9px] font-mono text-blue-600 font-bold">{Math.round(layer.scale * 100)}%</span>
+                               </div>
                                <input 
                                  type="range" 
-                                 min="0.1" 
-                                 max="1" 
+                                 min="1" 
+                                 max="3" 
                                  step="0.05" 
-                                 value={layer.opacity}
+                                 value={layer.scale ?? 1}
                                  onChange={(e) => {
                                    e.stopPropagation();
-                                   updateLayer(activeSlide.id, layer.id, { opacity: parseFloat(e.target.value) });
+                                   updateLayer(activeSlide.id, layer.id, { scale: parseFloat(e.target.value) });
                                  }}
                                  className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-neutral-200 accent-[#3B82F6]"
                                  onClick={e => e.stopPropagation()}
@@ -797,7 +817,7 @@ export default function App() {
                             src={l.content} 
                             className="h-full w-full object-contain" 
                             referrerPolicy="no-referrer" 
-                            style={{ opacity: l.opacity }}
+                            style={{ transform: `scale(${l.scale})` }}
                           />
                         )}
                       </div>
