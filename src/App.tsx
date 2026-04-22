@@ -68,44 +68,47 @@ export default function App() {
 
   // Auth Handling
   useEffect(() => {
-    addLog("Auth Initializing...");
+    addLog("Auth Sync Started...");
+    const lastAttempt = localStorage.getItem('auth_attempt');
     
     const checkRedirect = async (retryCount = 0) => {
       try {
         const result = await getRedirectResult(auth);
         if (result?.user) {
-          addLog(`Redirect Success: ${result.user.email}`);
+          addLog(`Success: ${result.user.email}`);
           setUser(result.user);
+          localStorage.removeItem('auth_attempt');
           setIsLoadingAuth(false);
-          return true;
+          return;
         }
         
-        // If no user yet but we are coming back from a redirect, retry once after a tiny delay
         if (retryCount < 2) {
-          addLog(`Checking payload (Attempt ${retryCount + 1})...`);
+          addLog(`Scanning (Attempt ${retryCount + 1})...`);
           setTimeout(() => checkRedirect(retryCount + 1), 1000);
-          return false;
+          return;
         }
         
-        addLog("No redirect payload found.");
+        if (lastAttempt) {
+          addLog("LOGIN LOST: Browser blocked data transfer.");
+        } else {
+          addLog("Status: Ready");
+        }
         setIsLoadingAuth(false);
-        return false;
       } catch (e: any) {
-        addLog(`Auth Err: ${e.code}`);
+        addLog(`Error: ${e.code}`);
         setIsLoadingAuth(false);
-        return false;
       }
     };
 
     checkRedirect();
 
-    // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (u) {
-        addLog(`State: Active (${u.email})`);
+        addLog(`Active: ${u.email}`);
         setUser(u);
+        localStorage.removeItem('auth_attempt');
       } else {
-        addLog("State: Not Logged In");
+        addLog("Status: Logged Out");
       }
       setIsLoadingAuth(false);
     });
@@ -423,17 +426,19 @@ export default function App() {
   };
 
   const handleLogin = () => {
-    // CRITICAL: Call signInWithPopup FIRST before any state changes (like setIsLoading)
-    // This ensures the browser sees it as a direct result of the user click.
+    setAuthError(null);
+    localStorage.setItem('auth_attempt', Date.now().toString());
+    
     signInWithPopup(auth, googleProvider)
       .then((result) => {
         if (result.user) {
-          addLog(`Success: ${result.user.email}`);
+          addLog(`Popup Success: ${result.user.email}`);
           setUser(result.user);
+          localStorage.removeItem('auth_attempt');
         }
       })
       .catch((error: any) => {
-        addLog(`Error: ${error.code}`);
+        addLog(`Popup Error: ${error.code}`);
         if (error.code === 'auth/popup-blocked') {
           setAuthError("POPUP_BLOCKED");
         } else if (error.code === 'auth/unauthorized-domain') {
@@ -441,25 +446,23 @@ export default function App() {
         } else if (error.code === 'auth/popup-closed-by-user') {
           setAuthError(null);
         } else {
-          setAuthError(`ERROR: ${error.code}`);
+          setAuthError(error.code);
         }
       })
       .finally(() => {
         setIsLoggingIn(false);
       });
       
-    // Set loading state AFTER the popup call
     setIsLoggingIn(true);
-    setAuthError(null);
   };
 
   const handleRedirectLogin = () => {
     setAuthError(null);
     setIsLoggingIn(true);
-    addLog("Switching to Redirect...");
+    addLog("Redirecting...");
+    localStorage.setItem('auth_attempt', Date.now().toString());
     signInWithRedirect(auth, googleProvider).catch(e => {
-      addLog(`Redirect call failed: ${e.code}`);
-      setAuthError(`REDIRECT_ERROR: ${e.code}`);
+      addLog(`Redirect Err: ${e.code}`);
       setIsLoggingIn(false);
     });
   };
