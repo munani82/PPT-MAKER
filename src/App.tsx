@@ -69,46 +69,57 @@ export default function App() {
   // Auth Handling
   useEffect(() => {
     addLog("Auth Sync Started...");
-    const lastAttempt = localStorage.getItem('auth_attempt');
     
-    const checkRedirect = async (retryCount = 0) => {
+    // 1. Check for known user first (if session survived)
+    if (auth.currentUser) {
+      addLog(`Found Session: ${auth.currentUser.email}`);
+      setUser(auth.currentUser);
+      setIsLoadingAuth(false);
+    }
+
+    // 2. Handle the redirect payload (The tricky part on Vercel)
+    const handleRedirect = async () => {
       try {
         const result = await getRedirectResult(auth);
         if (result?.user) {
           addLog(`Success: ${result.user.email}`);
           setUser(result.user);
           localStorage.removeItem('auth_attempt');
-          setIsLoadingAuth(false);
-          return;
+        } else if (localStorage.getItem('auth_attempt')) {
+          addLog("SCANNING: Looking for data...");
+          // If expected attempt failed, check auth state a few more times manually
+          let attempts = 0;
+          const interval = setInterval(() => {
+            attempts++;
+            if (auth.currentUser) {
+              addLog(`Recovered: ${auth.currentUser.email}`);
+              setUser(auth.currentUser);
+              localStorage.removeItem('auth_attempt');
+              clearInterval(interval);
+            }
+            if (attempts >= 5) {
+              addLog("FAIL: Data blocked by browser.");
+              clearInterval(interval);
+            }
+          }, 1000);
         }
-        
-        if (retryCount < 2) {
-          addLog(`Scanning (Attempt ${retryCount + 1})...`);
-          setTimeout(() => checkRedirect(retryCount + 1), 1000);
-          return;
-        }
-        
-        if (lastAttempt) {
-          addLog("LOGIN LOST: Browser blocked data transfer.");
-        } else {
-          addLog("Status: Ready");
-        }
-        setIsLoadingAuth(false);
       } catch (e: any) {
         addLog(`Error: ${e.code}`);
+      } finally {
         setIsLoadingAuth(false);
       }
     };
 
-    checkRedirect();
+    handleRedirect();
 
+    // 3. Global Observer
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (u) {
         addLog(`Active: ${u.email}`);
         setUser(u);
         localStorage.removeItem('auth_attempt');
       } else {
-        addLog("Status: Logged Out");
+        addLog("Status: Offline");
       }
       setIsLoadingAuth(false);
     });
