@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "DocumentState": {
+      "title": "Document State",
+      "description": "User's current presentation state containing all slides and layers.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who owns this state." },
+        "slides": { 
+          "type": "array",
+          "description": "List of slides in the document."
+        },
+        "orientation": { "type": "string", "enum": ["landscape", "portrait"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "slides", "orientation", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/userStates/{userId}": {
+      "schema": "DocumentState",
+      "description": "Root document for a user's persistent worship flow state."
+    }
+  }
+}

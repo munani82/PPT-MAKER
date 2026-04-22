@@ -17,32 +17,103 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
-  HelpCircle
+  HelpCircle,
+  LogIn,
+  LogOut,
+  RotateCcw,
+  CloudCheck,
+  Cloud
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pptxgen from 'pptxgenjs';
 import { cn } from './lib/utils';
 import { Slide, Layer, LayoutOrientation } from './types';
+import { auth, signInWithGoogle, logout, db } from './lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 const A3_WIDTH_IN = 16.54;
 const A3_HEIGHT_IN = 11.69;
 
+const DEFAULT_SLIDE = () => ({
+  id: crypto.randomUUID(),
+  layers: Array.from({ length: 6 }).map((_, i) => ({
+    id: crypto.randomUUID(),
+    name: `Slot ${i + 1}`,
+    type: 'image',
+    isVisible: true,
+    content: '',
+    opacity: 1
+  }))
+});
+
 export default function App() {
-  const [slides, setSlides] = useState<Slide[]>([
-    { id: crypto.randomUUID(), layers: Array.from({ length: 6 }).map((_, i) => ({
-      id: crypto.randomUUID(),
-      name: `Slot ${i + 1}`,
-      type: 'image',
-      isVisible: true,
-      content: '',
-      opacity: 1
-    }))}
-  ]);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [slides, setSlides] = useState<Slide[]>([DEFAULT_SLIDE()]);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [orientation, setOrientation] = useState<LayoutOrientation>('landscape');
   const [showHelp, setShowHelp] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Auth Handling
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsLoadingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore Sync - Loading
+  useEffect(() => {
+    if (!user) return;
+
+    const docRef = doc(db, 'userStates', user.uid);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists() && !isSaving) {
+        const data = docSnap.data();
+        if (data.slides) setSlides(data.slides);
+        if (data.orientation) setOrientation(data.orientation);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, isSaving]);
+
+  // Firestore Sync - Saving (Debounced)
+  useEffect(() => {
+    if (!user || isLoadingAuth) return;
+
+    const saveTimeout = setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        await setDoc(doc(db, 'userStates', user.uid), {
+          userId: user.uid,
+          slides,
+          orientation,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.error("Save failed:", e);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 2000); // Save after 2s of inactivity
+
+    return () => clearTimeout(saveTimeout);
+  }, [slides, orientation, user, isLoadingAuth]);
+
+  const resetProject = () => {
+    if (confirm("모든 작업 내용이 사라집니다. 정말 초기화하시겠습니까?")) {
+      setSlides([DEFAULT_SLIDE()]);
+      setOrientation('landscape');
+      setActiveSlideIndex(0);
+      setActiveLayerId(null);
+    }
+  };
 
   const activeSlide = slides[activeSlideIndex];
 
@@ -295,8 +366,13 @@ export default function App() {
     }
   };
 
+  const handleLogout = async () => {
+    await logout();
+    window.location.reload(); // Refresh to clear local state
+  };
+
   return (
-    <div className="flex h-screen w-full flex-col font-sans bg-[#F2F2F2]">
+    <div className="flex h-screen w-full flex-col bg-[#F5F5F7] font-sans text-neutral-900 selection:bg-blue-100">
       {/* Top Bar */}
       <header className="flex h-14 items-center justify-between border-b border-[#E5E5E5] bg-white px-6">
         <div className="flex items-center gap-3">
@@ -308,10 +384,42 @@ export default function App() {
             <span className="rounded-full bg-[#E0F2FE] px-3 py-0.5 text-[11px] font-semibold text-[#0369A1]">
               A3 {orientation === 'landscape' ? 'Horizontal' : 'Vertical'} Mode
             </span>
+            {user && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-neutral-50 border border-neutral-100">
+                {isSaving ? (
+                  <Cloud className="h-3 w-3 text-neutral-400 animate-pulse" />
+                ) : (
+                  <CloudCheck className="h-3 w-3 text-green-500" />
+                )}
+                <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-tighter">
+                  {isSaving ? 'Syncing...' : 'Saved to Cloud'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-4">
+          {!isLoadingAuth && (
+            user ? (
+              <div className="flex items-center gap-3 pr-4 border-r border-neutral-200">
+                <div className="flex flex-col items-end">
+                  <span className="text-[11px] font-bold text-neutral-700">{user.displayName}</span>
+                  <button onClick={handleLogout} className="text-[9px] font-bold text-neutral-400 hover:text-red-500 uppercase tracking-wider">Logout</button>
+                </div>
+                {user.photoURL && <img src={user.photoURL} className="h-8 w-8 rounded-full border border-neutral-200" alt="avatar" />}
+              </div>
+            ) : (
+              <button 
+                onClick={signInWithGoogle}
+                className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[11px] font-bold text-blue-600 transition-all hover:bg-blue-100 active:scale-95"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Google Login
+              </button>
+            )
+          )}
+
           <div className="flex items-center rounded bg-neutral-100 p-1 ring-1 ring-neutral-200">
             <button 
               onClick={() => setOrientation('landscape')}
@@ -342,6 +450,14 @@ export default function App() {
             className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
           >
             <HelpCircle className="h-5 w-5" />
+          </button>
+
+          <button 
+            onClick={resetProject}
+            className="flex h-9 items-center gap-2 rounded border border-neutral-200 bg-white px-4 text-[13px] font-medium text-neutral-500 transition-all hover:bg-neutral-50 hover:text-neutral-800"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset
           </button>
 
           <button 
