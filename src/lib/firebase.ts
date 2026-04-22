@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
 
@@ -13,17 +13,24 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
-    // Handle cases where the user closed the popup or it was blocked
-    if (error.code === 'auth/popup-closed-by-user') {
-      console.warn("Sign-in popup was closed by the user.");
+    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
       return null;
     }
-    if (error.code === 'auth/cancelled-popup-request') {
-      console.warn("Sign-in request was cancelled (likely multiple clicks).");
-      return null;
-    }
-    console.error("Error signing in with Google:", error);
     throw error;
+  }
+};
+
+export const signInWithGoogleRedirect = async () => {
+  return await signInWithRedirect(auth, googleProvider);
+};
+
+export const handleRedirectResult = async () => {
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user || null;
+  } catch (error) {
+    console.error("Redirect login failed:", error);
+    return null;
   }
 };
 

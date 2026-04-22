@@ -28,7 +28,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import pptxgen from 'pptxgenjs';
 import { cn } from './lib/utils';
 import { Slide, Layer, LayoutOrientation } from './types';
-import { auth, signInWithGoogle, logout, db } from './lib/firebase';
+import { auth, signInWithGoogle, signInWithGoogleRedirect, handleRedirectResult, logout, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
@@ -62,6 +62,14 @@ export default function App() {
 
   // Auth Handling
   useEffect(() => {
+    // Handle redirect result first
+    handleRedirectResult().then(u => {
+      if (u) {
+        setUser(u);
+        setIsLoadingAuth(false);
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsLoadingAuth(false);
@@ -370,29 +378,35 @@ export default function App() {
 
   const handleLogin = () => {
     setAuthError(null);
-    // Note: We call state update AND login simultaneously to preserve user gesture
     setIsLoggingIn(true);
     
     signInWithGoogle()
       .then((u) => {
         if (!u) {
-          // Handled inside (popup closed etc)
           setIsLoggingIn(false);
           return;
         }
-        // Success happens via onAuthStateChanged
       })
       .catch((error: any) => {
         console.error("Login failed:", error);
         if (error.code === 'auth/popup-blocked') {
-          setAuthError("브라우저가 로그인 창을 차단했습니다. [새 탭에서 열기]를 눌러 실행하거나, 주소창의 차단 해제를 꼭 확인해주세요.");
+          setAuthError("POPUP_BLOCKED");
         } else if (error.code === 'auth/unauthorized-domain') {
-          setAuthError("인증되지 않은 도메인입니다. Firebase 콘솔에서 현재 주소를 승인된 도메인에 추가해야 합니다.");
+          setAuthError("UNAUTHORIZED_DOMAIN");
         } else {
-          setAuthError(`로그인 오류: ${error.code}`);
+          setAuthError(`ERROR: ${error.code}`);
         }
         setIsLoggingIn(false);
       });
+  };
+
+  const handleRedirectLogin = () => {
+    setAuthError(null);
+    setIsLoggingIn(true);
+    signInWithGoogleRedirect().catch(e => {
+      setAuthError(`REDIRECT_ERROR: ${e.code}`);
+      setIsLoggingIn(false);
+    });
   };
 
   const handleLogout = async () => {
@@ -430,10 +444,25 @@ export default function App() {
 
         <div className="flex items-center gap-4">
           {authError && (
-            <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-[11px] font-medium text-red-600 border border-red-100">
-              <HelpCircle className="h-3 w-3" />
-              {authError}
-              <button onClick={() => setAuthError(null)} className="ml-1 hover:text-red-800">×</button>
+            <div className="animate-in fade-in slide-in-from-top-1 flex flex-col gap-1 rounded-md bg-red-50 p-2 shadow-sm border border-red-100 max-w-[200px]">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-red-600 uppercase">
+                  <HelpCircle className="h-3 w-3" />
+                  Auth Issue
+                </div>
+                <button onClick={() => setAuthError(null)} className="text-red-400 hover:text-red-700">×</button>
+              </div>
+              <p className="text-[10px] leading-tight text-red-500">
+                {authError === 'POPUP_BLOCKED' ? "브라우저 차단으로 로그인 창이 열리지 않았습니다." : authError}
+              </p>
+              {authError === 'POPUP_BLOCKED' && (
+                <button 
+                  onClick={handleRedirectLogin}
+                  className="mt-1 w-full rounded bg-red-600 py-1 text-[9px] font-bold text-white hover:bg-red-700 transition-colors"
+                >
+                  Redirect 방식으로 다시 시도
+                </button>
+              )}
             </div>
           )}
 
