@@ -68,23 +68,41 @@ export default function App() {
 
   // Auth Handling
   useEffect(() => {
-    addLog("Checking auth state...");
+    addLog("Mounting Auth...");
     
-    // Handle redirect result
+    // Explicitly check current user on mount as backup
+    if (auth.currentUser) {
+      addLog(`Found Current: ${auth.currentUser.email}`);
+      setUser(auth.currentUser);
+      setIsLoadingAuth(false);
+    }
+
+    // Aggressive redirect check
     getRedirectResult(auth).then(result => {
       if (result?.user) {
-        addLog(`Redirect login success: ${result.user.email}`);
+        addLog(`Redirect OK: ${result.user.email}`);
         setUser(result.user);
+        setIsLoadingAuth(false);
+      } else {
+        addLog("Redirect: No payload");
       }
-    }).catch(e => addLog(`Redirect error: ${e.code}`));
+    }).catch(e => {
+      addLog(`Redirect Err: ${e.code}`);
+      setIsLoadingAuth(false);
+    });
 
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      addLog(u ? `Logged in: ${u.email}` : "State: Logged out");
+      addLog(u ? `Auth Observed: ${u.email}` : "Auth Observed: null");
       setUser(u);
       setIsLoadingAuth(false);
     });
     return () => unsubscribe();
   }, []);
+
+  const forceCheckAuth = () => {
+    addLog(`Manual Check: ${auth.currentUser ? auth.currentUser.email : "none"}`);
+    if (auth.currentUser) setUser(auth.currentUser);
+  };
 
   // Firestore Sync - Loading
   useEffect(() => {
@@ -508,18 +526,29 @@ export default function App() {
                 {user.photoURL && <img src={user.photoURL} className="h-8 w-8 rounded-full border border-neutral-200" alt="avatar" />}
               </div>
             ) : (
-              <button 
-                onClick={handleLogin}
-                disabled={isLoggingIn}
-                className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[11px] font-bold text-blue-600 transition-all hover:bg-blue-100 active:scale-95 disabled:opacity-50"
-              >
-                {isLoggingIn ? (
-                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                ) : (
-                  <LogIn className="h-3.5 w-3.5" />
-                )}
-                {isLoggingIn ? 'Connecting...' : 'Google Login'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleLogin}
+                  disabled={isLoggingIn}
+                  className="flex items-center gap-2 rounded-full bg-blue-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+                >
+                  {isLoggingIn ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <LogIn className="h-3.5 w-3.5" />}
+                  Login (Popup)
+                </button>
+                <button 
+                  onClick={handleRedirectLogin}
+                  className="flex items-center gap-2 rounded-full bg-neutral-100 px-4 py-1.5 text-[11px] font-bold text-neutral-600 transition-all hover:bg-neutral-200 active:scale-95"
+                >
+                  Login (Redirect)
+                </button>
+                <button 
+                  onClick={forceCheckAuth}
+                  className="h-8 w-8 flex items-center justify-center rounded-full border border-neutral-200 text-neutral-400 hover:bg-neutral-50"
+                  title="Check Connection"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )
           )}
 
