@@ -386,31 +386,34 @@ export default function App() {
   };
 
   const handleLogin = () => {
-    setAuthError(null);
-    setIsLoggingIn(true);
-    addLog("Opening Login Popup...");
-    
+    // CRITICAL: Call signInWithPopup FIRST before any state changes (like setIsLoading)
+    // This ensures the browser sees it as a direct result of the user click.
     signInWithPopup(auth, googleProvider)
       .then((result) => {
         if (result.user) {
           addLog(`Success: ${result.user.email}`);
           setUser(result.user);
         }
-        setIsLoggingIn(false);
       })
       .catch((error: any) => {
         addLog(`Error: ${error.code}`);
-        setIsLoggingIn(false);
         if (error.code === 'auth/popup-blocked') {
           setAuthError("POPUP_BLOCKED");
         } else if (error.code === 'auth/unauthorized-domain') {
           setAuthError("UNAUTHORIZED_DOMAIN");
         } else if (error.code === 'auth/popup-closed-by-user') {
-          setAuthError(null); // Silent
+          setAuthError(null);
         } else {
           setAuthError(`ERROR: ${error.code}`);
         }
+      })
+      .finally(() => {
+        setIsLoggingIn(false);
       });
+      
+    // Set loading state AFTER the popup call
+    setIsLoggingIn(true);
+    setAuthError(null);
   };
 
   const handleRedirectLogin = () => {
