@@ -31,7 +31,7 @@ import { cn } from './lib/utils';
 import { Slide, Layer, LayoutOrientation } from './types';
 import { auth, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp, collection, query, orderBy, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 
 const A3_WIDTH_IN = 16.54;
 const A3_HEIGHT_IN = 11.69;
@@ -61,6 +61,10 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const markDirty = () => {
+    setHasPendingChanges(true);
+  };
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Auth Handling
@@ -72,60 +76,97 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Firestore Sync - Loading
+  // Firestore Sync - Loading Metadata & Slides
   useEffect(() => {
     if (!user) return;
 
-    const docRef = doc(db, 'userStates', user.uid);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    const metaRef = doc(db, 'userStates', user.uid);
+    const slidesRef = collection(db, 'userStates', user.uid, 'slides');
+    const slidesQuery = query(slidesRef, orderBy('index', 'asc'));
+
+    // 1. Listen to Metadata
+    const unsubMeta = onSnapshot(metaRef, (docSnap) => {
       if (docSnap.exists() && !isSaving) {
         const data = docSnap.data();
-        if (data.slides) {
-          // Normalize data: ensure all layers have a 'scale' property (migration from opacity)
-          const normalizedSlides = data.slides.map((slide: any) => ({
-            ...slide,
-            layers: slide.layers.map((layer: any) => ({
-              ...layer,
-              scale: layer.scale ?? layer.opacity ?? 1
-            }))
-          }));
-          setSlides(normalizedSlides);
-        }
         if (data.orientation) setOrientation(data.orientation);
       }
     });
 
-    return () => unsubscribe();
-  }, [user, isSaving]);
+    // 2. Listen to Slides Subcollection
+    const unsubSlides = onSnapshot(slidesQuery, (querySnap) => {
+      if (!isSaving && !querySnap.empty) {
+        const loadedSlides = querySnap.docs.map(doc => {
+          const slideData = doc.data() as Slide;
+          return {
+            ...slideData,
+            layers: slideData.layers.map(layer => ({
+              ...layer,
+              scale: layer.scale ?? 1
+            }))
+          };
+        });
+        setSlides(loadedSlides);
+      }
+    }, (error) => {
+      console.error("Slides listener error:", error);
+    });
+
+    return () => {
+      unsubMeta();
+      unsubSlides();
+    };
+  }, [user]);
 
   // Firestore Sync - Detecting Changes
-  useEffect(() => {
-    if (!user || isLoadingAuth) return;
-    
-    // To prevent the "Echo" effect (server update triggering pending state)
-    // we should only mark as pending if the window is currently focused 
-    // or if the change didn't just come from a database load.
-    const isInitialLoad = !lastSaved && !hasPendingChanges;
-    if (isInitialLoad) return;
-
-    setHasPendingChanges(true);
-  }, [slides, orientation]);
+  // Now using explicit markDirty() calls in setters for manual UI sync
 
   const saveToCloud = async () => {
     if (!user) return;
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'userStates', user.uid), {
+      const batch = writeBatch(db);
+      
+      // 1. Sync Metadata
+      const metaRef = doc(db, 'userStates', user.uid);
+      batch.set(metaRef, {
         userId: user.uid,
-        slides,
         orientation,
         updatedAt: serverTimestamp()
       }, { merge: true });
+      
+      // 2. Cleanup Orphaned Slides (Deletions)
+      // Since snapshots are reactive, we need to be careful. 
+      // We'll fetch the current slide IDs from Firestore once to see what to delete.
+      const slidesRef = collection(db, 'userStates', user.uid, 'slides');
+      const currentDbSlides = await getDocs(slidesRef);
+      const activeSlideIds = new Set(slides.map(s => s.id));
+      
+      currentDbSlides.docs.forEach(docSnap => {
+        if (!activeSlideIds.has(docSnap.id)) {
+          batch.delete(docSnap.ref);
+        }
+      });
+
+      // 3. Sync Current Slides
+      slides.forEach((slide, idx) => {
+        const slideRef = doc(db, 'userStates', user.uid, 'slides', slide.id);
+        batch.set(slideRef, {
+          ...slide,
+          index: idx,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      await batch.commit();
       setLastSaved(new Date());
       setHasPendingChanges(false);
     } catch (e) {
       console.error("Save failed:", e);
-      alert("저장에 실패했습니다.");
+      if (e instanceof Error && e.message.includes('exceeds the maximum allowed size')) {
+        alert("데이터 크기가 너무 큽니다. 고해상도 이미지를 줄이거나 슬라이드를 나누어 저장해 주세요.");
+      } else {
+        alert("저장에 실패했습니다.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -137,6 +178,7 @@ export default function App() {
       setOrientation('landscape');
       setActiveSlideIndex(0);
       setActiveLayerId(null);
+      markDirty();
     }
   };
 
@@ -153,6 +195,7 @@ export default function App() {
     };
     updateSlideLayers(activeSlide.id, [...activeSlide.layers, newLayer]);
     setActiveLayerId(newLayer.id);
+    markDirty();
   };
 
   const deleteLayer = (layerId: string) => {
@@ -188,6 +231,7 @@ export default function App() {
     setSlides([...slides, newSlide]);
     setActiveSlideIndex(slides.length);
     setActiveLayerId(newSlide.layers[0].id);
+    markDirty();
   };
 
   const deleteSlide = (index: number) => {
@@ -197,6 +241,7 @@ export default function App() {
     if (activeSlideIndex >= index) {
       setActiveSlideIndex(Math.max(0, activeSlideIndex - 1));
     }
+    markDirty();
   };
 
   const updateLayer = (slideId: string, layerId: string, updates: Partial<Layer>) => {
@@ -207,6 +252,7 @@ export default function App() {
         layers: s.layers.map(l => l.id === layerId ? { ...l, ...updates } : l)
       };
     }));
+    markDirty();
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -517,7 +563,7 @@ export default function App() {
 
           <div className="flex items-center rounded bg-neutral-100 p-1 ring-1 ring-neutral-200">
             <button 
-              onClick={() => setOrientation('landscape')}
+              onClick={() => { setOrientation('landscape'); markDirty(); }}
               className={cn(
                 "flex h-7 items-center gap-2 rounded px-3 text-[11px] font-semibold uppercase transition-all",
                 orientation === 'landscape' ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
@@ -527,7 +573,7 @@ export default function App() {
               Landscape
             </button>
             <button 
-              onClick={() => setOrientation('portrait')}
+              onClick={() => { setOrientation('portrait'); markDirty(); }}
               className={cn(
                 "flex h-7 items-center gap-2 rounded px-3 text-[11px] font-semibold uppercase transition-all",
                 orientation === 'portrait' ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"

@@ -1,25 +1,35 @@
 {
   "entities": {
-    "DocumentState": {
-      "title": "Document State",
-      "description": "User's current presentation state containing all slides and layers.",
+    "DocumentMetadata": {
+      "title": "Document Metadata",
+      "description": "User's presentation metadata (orientation, timestamps).",
       "type": "object",
       "properties": {
-        "userId": { "type": "string", "description": "The UID of the user who owns this state." },
-        "slides": { 
-          "type": "array",
-          "description": "List of slides in the document."
-        },
+        "userId": { "type": "string" },
         "orientation": { "type": "string", "enum": ["landscape", "portrait"] },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "slides", "orientation", "updatedAt"]
+      "required": ["userId", "orientation", "updatedAt"]
+    },
+    "SlideData": {
+      "title": "Slide Data",
+      "description": "Individual slide content with layers.",
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer", "description": "Position of the slide in the presentation." },
+        "layers": { "type": "array" }
+      },
+      "required": ["index", "layers"]
     }
   },
   "firestore": {
     "/userStates/{userId}": {
-      "schema": "DocumentState",
-      "description": "Root document for a user's persistent worship flow state."
+      "schema": "DocumentMetadata",
+      "description": "Metadata for the presentation."
+    },
+    "/userStates/{userId}/slides/{slideId}": {
+      "schema": "SlideData",
+      "description": "Individual slide documents."
     }
   }
 }

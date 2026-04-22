@@ -14,20 +14,29 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isValidDocumentState(data) {
-      return data.keys().hasAll(['userId', 'slides', 'orientation', 'updatedAt']) &&
+    function isValidMetadata(data) {
+      return data.keys().hasAll(['userId', 'orientation', 'updatedAt']) &&
              data.userId is string &&
-             data.slides is list &&
              data.orientation in ['landscape', 'portrait'] &&
              data.updatedAt is timestamp;
     }
 
+    function isValidSlide(data) {
+      return data.keys().hasAll(['index', 'layers']) &&
+             data.index is int &&
+             data.layers is list;
+    }
+
     match /userStates/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidDocumentState(request.resource.data);
-      allow update: if isOwner(userId) && isValidDocumentState(request.resource.data) &&
-                    request.resource.data.userId == resource.data.userId;
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidMetadata(request.resource.data);
       allow delete: if isOwner(userId);
+
+      match /slides/{slideId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidSlide(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
     }
   }
 }
