@@ -62,7 +62,13 @@ export default function App() {
 
   // Auth Handling
   useEffect(() => {
-    // Handle redirect result first
+    // 1. Initial check for immediate user
+    if (auth.currentUser) {
+      setUser(auth.currentUser);
+      setIsLoadingAuth(false);
+    }
+
+    // 2. Handle redirect result first
     handleRedirectResult().then(u => {
       if (u) {
         setUser(u);
@@ -70,6 +76,7 @@ export default function App() {
       }
     });
 
+    // 3. Subscription
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsLoadingAuth(false);
@@ -382,10 +389,10 @@ export default function App() {
     
     signInWithGoogle()
       .then((u) => {
-        if (!u) {
-          setIsLoggingIn(false);
-          return;
+        if (u) {
+          setUser(u); // Manually inject user into state
         }
+        setIsLoggingIn(false);
       })
       .catch((error: any) => {
         console.error("Login failed:", error);
@@ -453,8 +460,17 @@ export default function App() {
                 <button onClick={() => setAuthError(null)} className="text-red-400 hover:text-red-700">×</button>
               </div>
               <p className="text-[10px] leading-tight text-red-500">
-                {authError === 'POPUP_BLOCKED' ? "브라우저 차단으로 로그인 창이 열리지 않았습니다." : authError}
+                {authError === 'POPUP_BLOCKED' ? "브라우저 차단으로 로그인 창이 열리지 않았습니다." : 
+                 authError === 'UNAUTHORIZED_DOMAIN' ? "Firebase 콘솔에 현재 도메인이 등록되지 않았습니다." : authError}
               </p>
+              {authError === 'UNAUTHORIZED_DOMAIN' && (
+                <div className="mt-1 flex flex-col gap-1">
+                  <p className="text-[8px] text-neutral-500 break-all bg-white p-1 rounded border border-red-100">
+                    ais-pre-utkzruc3s7h2sorxto3srk-208307728335.asia-east1.run.app
+                  </p>
+                  <p className="text-[8px] font-bold text-red-400">위 주소를 Firebase 승인된 도메인에 추가해주세요.</p>
+                </div>
+              )}
               {authError === 'POPUP_BLOCKED' && (
                 <button 
                   onClick={handleRedirectLogin}
