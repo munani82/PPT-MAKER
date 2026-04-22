@@ -70,22 +70,43 @@ export default function App() {
   useEffect(() => {
     addLog("Auth Initializing...");
     
-    // Handle redirect result immediately
-    getRedirectResult(auth).then(result => {
-      if (result?.user) {
-        addLog(`Redirect Success: ${result.user.email}`);
-        setUser(result.user);
-      } else {
-        addLog("No redirect data found");
+    const checkRedirect = async (retryCount = 0) => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          addLog(`Redirect Success: ${result.user.email}`);
+          setUser(result.user);
+          setIsLoadingAuth(false);
+          return true;
+        }
+        
+        // If no user yet but we are coming back from a redirect, retry once after a tiny delay
+        if (retryCount < 2) {
+          addLog(`Checking payload (Attempt ${retryCount + 1})...`);
+          setTimeout(() => checkRedirect(retryCount + 1), 1000);
+          return false;
+        }
+        
+        addLog("No redirect payload found.");
+        setIsLoadingAuth(false);
+        return false;
+      } catch (e: any) {
+        addLog(`Auth Err: ${e.code}`);
+        setIsLoadingAuth(false);
+        return false;
       }
-    }).catch(e => {
-      addLog(`Redirect Error: ${e.code}`);
-    });
+    };
+
+    checkRedirect();
 
     // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      addLog(u ? `User: ${u.email}` : "No User detected");
-      setUser(u);
+      if (u) {
+        addLog(`State: Active (${u.email})`);
+        setUser(u);
+      } else {
+        addLog("State: Not Logged In");
+      }
       setIsLoadingAuth(false);
     });
     
