@@ -699,12 +699,12 @@ export default function App() {
         </aside>
 
         {/* Center Canvas */}
-        <section className="relative flex flex-1 flex-col items-center justify-center bg-[#EAEAEA] p-12">
+        <section className="relative flex flex-1 flex-col items-center justify-center bg-[#EAEAEA] p-4 md:p-8">
           {/* Canvas Wrapper */}
           <div 
             className={cn(
-              "relative bg-white shadow-[0_10px_30px_rgba(0,0,0,0.1)] transition-all duration-500 ease-in-out overflow-hidden ring-1 ring-neutral-200",
-              orientation === 'landscape' ? "aspect-[1.414/1] h-full max-h-[80%]" : "aspect-[1/1.414] h-full max-h-[90%]"
+              "relative bg-white shadow-[20px_20px_60px_rgba(0,0,0,0.15)] transition-all duration-500 ease-in-out overflow-hidden ring-1 ring-neutral-200",
+              orientation === 'landscape' ? "aspect-[1.414/1] h-full max-h-[95%]" : "aspect-[1/1.414] h-full max-h-[95%]"
             )}
           >
             {/* Grid Layout Canvas */}
